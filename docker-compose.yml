@@ -1,0 +1,63 @@
+# AI 派蒙服务（teyvat-ai）单服务编排
+#
+# 用法：
+#   Copy-Item .env.example .env     # 先准备好密钥
+#   docker compose up -d --build
+#   docker compose ps
+#   docker compose logs -f
+#   docker compose down
+#
+# 与主服务的关系：两者是独立项目、独立容器，只通过 HTTP 契约通信。
+# 通信方向是「主服务 → AI 服务」，所以这里只暴露回环端口，不对外网开放。
+
+name: teyvat-ai
+
+services:
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.14"
+        # P2/P3 需要时改为 "[rag]" 或 "[rag,graph]"
+        EXTRAS: ""
+
+    image: teyvat-ai:0.1.0
+    container_name: teyvat-ai
+    restart: unless-stopped
+
+    # 密钥全部来自 .env（已被 .dockerignore 排除，不会打进镜像）
+    env_file:
+      - .env
+
+    environment:
+      # 容器内必须监听 0.0.0.0，否则宿主上的主服务访问不到
+      AI_SERVER_HOST: 0.0.0.0
+      AI_SERVER_PORT: "8090"
+
+    ports:
+      # 只绑定 127.0.0.1：宿主上的主服务（http://127.0.0.1:8090）可以访问，
+      # 局域网/公网访问不到 —— AI 服务不得暴露到公网
+      - "127.0.0.1:8090:8090"
+
+    extra_hosts:
+      # 容器内若要回调宿主上的主服务（PROMPT_STORE_MODE=http、P2/P3 的 /internal/*），
+      # 用 host.docker.internal:8080 即可。Linux 需要这一行，Windows/Mac 自带。
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.getenv('AI_SERVER_PORT','8090')+'/health',timeout=4).getcode()==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

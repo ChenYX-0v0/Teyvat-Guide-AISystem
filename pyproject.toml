@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[project]
+name = "teyvat-ai"
+version = "0.1.0"
+description = "AI 派蒙服务：基于 LangChain + DeepSeek 的独立 AI 服务，为 teyvat-guide 主服务提供 /v1/complete"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+    "structlog>=24.4",
+    "langchain-core>=0.3.30",
+    "langchain-openai>=0.2.14",
+]
+
+[project.optional-dependencies]
+# P0/P1 只需要上面的核心依赖；以下按阶段安装
+rag = [
+    "langchain-community>=0.3",
+    "chromadb>=0.5",
+    "sentence-transformers>=3.3",
+]
+graph = [
+    "langgraph>=0.2",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

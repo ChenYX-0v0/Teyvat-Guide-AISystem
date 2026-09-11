@@ -1,0 +1,36 @@
+# 构建上下文里绝不能出现密钥
+.env
+.env.*
+!.env.example
+
+# 版本控制与虚拟环境
+.git
+.gitignore
+.venv/
+venv/
+
+# Python 产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 测试与缓存（镜像里不需要）
+tests/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 文档不进镜像
+*.md
+!README.md
+
+# P2 向量库本地数据
+.chroma/
+data/vectors/
+
+# 运行产物
+*.log
+logs/
