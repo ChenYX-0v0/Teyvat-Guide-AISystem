@@ -321,6 +321,8 @@ class Orchestrator:
             "tokens": usage.model_dump(),
             "finishReason": finish_reason,
             "model": llm.model_name,
+            # profile 为新增可选字段（非破坏性）：主服务据此落库观测档位命中情况
+            "profile": profile.name,
             "elapsedMs": elapsed_ms,
         }
 
