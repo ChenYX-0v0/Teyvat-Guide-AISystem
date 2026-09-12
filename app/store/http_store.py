@@ -1,6 +1,6 @@
 """主服务内部只读接口后端（生产推荐）。
 
-期望的主服务接口（需另行在主服务实现，见 doc/03-主服务对接说明.md）：
+期望的主服务接口（需另行在主服务实现，见 shared-docs/03-主服务对接说明.md）：
     GET /internal/v1/ai/prompts?scenes=paimon_base,paimon_rules
     Header: X-Internal-Key: <key>
     → {"code":0,"message":"ok","data":{"items":[

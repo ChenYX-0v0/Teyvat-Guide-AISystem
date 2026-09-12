@@ -10,7 +10,7 @@
 
 | 项目 | 项目内路径 | 实际位置 | 内容 |
 | --- | --- | --- | --- |
-| AI 派蒙服务（本仓） | `doc/` | `teyvat-docs\ai` | 本项目文档（架构设计 / 部署运维 / 路线图 / 阿里云方案 / 文档索引） |
+| AI 派蒙服务（本仓） | `doc/` | `teyvat-docs\ai` | 本项目文档（架构设计 / 部署运维 / 路线图 / 阿里云方案 / 待办与问题记录 / 文档索引） |
 | AI 派蒙服务（本仓） | `shared-docs/` | `teyvat-docs\shared` | **跨项目契约**（01 接口契约 / 03 主服务对接说明 / 04 用户体系与鉴权边界设计） |
 | 主服务 teyvat-guide | `docs/`、`shared-docs/` | `teyvat-docs\web`、`\shared` | 主服务文档、共用契约 |
 | 后台 demo-app | `docs/`、`aidoc/` | `teyvat-docs\admin`、`\ai` | 后台文档、AI 文档（同源） |
