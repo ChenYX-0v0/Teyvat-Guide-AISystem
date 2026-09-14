@@ -70,6 +70,16 @@ PROFILES: dict[str, Profile] = {
         max_tokens=2048,
         note="结构化输出",
     ),
+    # 无关问题判定（内部使用，见 shared-docs/05-AI使用边界设计（匿名·配额·内容治理）.md §3.2）：
+    # 关闭思考、温度 0、输出极短；**不放进对外 profile 枚举**，调用方无法主动指定。
+    "classify": Profile(
+        name="classify",
+        thinking=False,
+        reasoning_effort="none",
+        temperature=0.0,
+        max_tokens=16,
+        note="无关问题判定",
+    ),
 }
 
 DEFAULT_PROFILE = "chat"

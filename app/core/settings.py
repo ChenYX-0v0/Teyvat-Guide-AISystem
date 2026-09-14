@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     max_prompt_chars: int = 4000
     max_history_messages: int = 40
 
+    # ---------- 无关问题判定（口径见 shared-docs/05 §3） ----------
+    # off = 不判定（默认，off_topic 全为 NULL）
+    # sample = 会话首问必判 + 其余按比例抽样（成本与覆盖的折中）
+    # all = 每条提问都判（最准，成本最高）
+    ai_classify_mode: str = "off"
+    ai_classify_sample_rate: float = 0.2
+
     # ---------- 提示词来源 ----------
     prompt_store_mode: str = "file"  # file | http
     prompt_store_file: str = "prompts/paimon.json"
@@ -81,6 +88,14 @@ class Settings(BaseSettings):
             problems.append(
                 f"PROMPT_STORE_MODE 非法：{self.prompt_store_mode}（仅支持 file / http）。"
             )
+
+        if self.ai_classify_mode not in {"off", "sample", "all"}:
+            problems.append(
+                f"AI_CLASSIFY_MODE 非法：{self.ai_classify_mode}（仅支持 off / sample / all）。"
+            )
+
+        if not 0.0 <= self.ai_classify_sample_rate <= 1.0:
+            problems.append("AI_CLASSIFY_SAMPLE_RATE 必须在 0~1 之间。")
 
         if problems:
             raise RuntimeError("配置校验未通过：\n  - " + "\n  - ".join(problems))

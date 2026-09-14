@@ -81,6 +81,14 @@ class CompleteData(BaseModel):
     sources: list[str] | None = None
     """P2 RAG 引用来源。"""
 
+    offTopic: bool | None = None  # noqa: N815 - 对齐契约
+    """无关问题判定（2026-09-14 新增，见 shared-docs/05 §3）。
+
+    **None = 未判定**（判定关闭 / 抽样未覆盖 / 判定失败）——主服务据此保持
+    `chat_messages.off_topic = NULL`，不要把它当成 false（判定为有关）。"""
+    offTopicReason: str | None = None  # noqa: N815
+    """子类：game（有关）| chitchat | other_domain | injection | unclear。"""
+
 
 class HealthData(BaseModel):
     status: str

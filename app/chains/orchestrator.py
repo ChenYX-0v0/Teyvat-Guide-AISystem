@@ -19,6 +19,7 @@ from app.core.errors import (
 )
 from app.core.logger import get_logger
 from app.core.settings import Settings
+from app.llm.classifier import classify_off_topic, should_classify
 from app.llm.deepseek import build_llm
 from app.llm.profiles import Profile
 from app.schemas.chat import ChatMessage, CompleteData, CompleteRequest, TokenUsage
@@ -207,6 +208,18 @@ class Orchestrator:
             )
             raise error from exc
 
+    # ---------------- 无关问题判定 ----------------
+
+    async def _judge_off_topic(self, req: CompleteRequest) -> tuple[bool, str] | None:
+        """判定提问是否与游戏无关（口径见 shared-docs/05 §3.2）。
+
+        - 判定关闭 / 抽样未命中 → 直接返回 None（**不产生任何上游调用**）
+        - 判定失败 → None（异常已在 classifier 内消化，不影响回答）
+        """
+        if not should_classify(self._settings, req):
+            return None
+        return await classify_off_topic(self._settings, req, self._sem)
+
     # ---------------- 非流式 ----------------
 
     async def complete(self, req: CompleteRequest) -> CompleteData:
@@ -256,6 +269,11 @@ class Orchestrator:
             elapsed_ms=elapsed_ms,
         )
 
+        # 无关问题判定：生成结束之后调用（见 shared-docs/05 §3.2）。
+        # 失败返回 None → 字段缺省 = 主服务保持 `off_topic = NULL`（未判定）。
+        # 注意：判定耗时不计入 elapsedMs（那是"回答"的耗时），也不计入 usage（平台成本）。
+        verdict = await self._judge_off_topic(req)
+
         return CompleteData(
             reply=reply,
             model=llm.model_name,
@@ -264,6 +282,8 @@ class Orchestrator:
             elapsedMs=elapsed_ms,
             profile=profile.name,
             thinking=profile.thinking,
+            offTopic=verdict[0] if verdict else None,
+            offTopicReason=verdict[1] if verdict else None,
         )
 
     # ---------------- 流式（P3 协议先行实现） ----------------
@@ -317,7 +337,11 @@ class Orchestrator:
             tokens_cached=usage.cached,
             elapsed_ms=elapsed_ms,
         )
-        yield "done", {
+        # 无关问题判定：**done 之前**执行，结果随 done 一起下发（done 因此晚 0.3~1s，
+        # 此时全文已发出，用户无感）。判定失败只表现为字段缺省（未判定），不影响回答。
+        verdict = await self._judge_off_topic(req)
+
+        done_payload: dict[str, Any] = {
             "tokens": usage.model_dump(),
             "finishReason": finish_reason,
             "model": llm.model_name,
@@ -325,6 +349,11 @@ class Orchestrator:
             "profile": profile.name,
             "elapsedMs": elapsed_ms,
         }
+        if verdict is not None:
+            # 只在真正判定过时下发这两个字段：缺失 = 未判定（契约见 shared-docs/01 §6）
+            done_payload["offTopic"] = verdict[0]
+            done_payload["offTopicReason"] = verdict[1]
+        yield "done", done_payload
 
 
 def profile_debug_info(profile: Profile) -> dict[str, Any]:  # pragma: no cover
