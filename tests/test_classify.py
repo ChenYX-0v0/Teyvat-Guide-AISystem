@@ -23,6 +23,10 @@ def _settings(**overrides) -> Settings:
         "prompt_store_mode": "file",
         "prompt_store_file": "prompts/paimon.json",
         "ai_log_json": False,
+        # 判定开关必须显式给默认值：不能依赖 .env / 环境变量，
+        # 否则本地把 AI_CLASSIFY_MODE 改成 sample 后这条用例就会挂（2026-09-15 实际踩到）
+        "ai_classify_mode": "off",
+        "ai_classify_sample_rate": 0.0,
     }
     base.update(overrides)
     return Settings(**base)
