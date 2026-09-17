@@ -53,6 +53,19 @@ class Settings(BaseSettings):
     ai_classify_mode: str = "off"
     ai_classify_sample_rate: float = 0.2
 
+    # ---------- 告警（P4.4；规则口径见 04-部署运维接入说明 §8.3） ----------
+    # 进程内评估 + 双通道投递：日志永远有；配了 webhook 再 POST 一份通用 JSON。
+    # ⚠️ 覆盖不到"进程整体挂掉"——那种情况进程内发不出任何东西，必须靠外部探针。
+    alert_enabled: bool = True
+    alert_webhook_url: str = ""
+    alert_window_seconds: int = Field(default=300, ge=30, le=86400)  # 统计窗口
+    alert_eval_interval_seconds: int = Field(default=30, ge=5, le=3600)  # 评估间隔
+    alert_cooldown_seconds: int = Field(default=1800, ge=0, le=86400)  # 同一规则重复通知冷却
+    alert_server_error_threshold: int = Field(default=3, ge=1)  # 窗口内 5xx 次数
+    alert_5xx_ratio_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    alert_min_requests: int = Field(default=20, ge=1)  # 请求数不足不判占比（防误报）
+    alert_cache_min_samples: int = Field(default=20, ge=1)  # 判缓存失效所需最少生成次数
+
     # ---------- 提示词来源 ----------
     prompt_store_mode: str = "file"  # file | http
     prompt_store_file: str = "prompts/paimon.json"
@@ -96,6 +109,12 @@ class Settings(BaseSettings):
 
         if not 0.0 <= self.ai_classify_sample_rate <= 1.0:
             problems.append("AI_CLASSIFY_SAMPLE_RATE 必须在 0~1 之间。")
+
+        if self.alert_eval_interval_seconds > self.alert_window_seconds:
+            problems.append(
+                "告警配置不合理：ALERT_EVAL_INTERVAL_SECONDS 不应大于 ALERT_WINDOW_SECONDS"
+                "（否则窗口内只够评估一次）。"
+            )
 
         if problems:
             raise RuntimeError("配置校验未通过：\n  - " + "\n  - ".join(problems))

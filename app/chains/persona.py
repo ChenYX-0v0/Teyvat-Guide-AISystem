@@ -12,6 +12,7 @@ DeepSeek 前缀缓存按 token 前缀匹配，任何位于前缀中的动态内�
 """
 
 from app.core.logger import get_logger
+from app.core.metrics import record_persona_fallback
 from app.core.settings import Settings
 from app.core.tokens import estimate_text_tokens, truncate_to_token_budget
 from app.schemas.context import RequestContext
@@ -53,6 +54,7 @@ def build_system_prompt(
 
     if not stable_parts:
         _log.error("persona.prompts_unavailable_using_fallback", scenes=list(STABLE_SCENES))
+        record_persona_fallback()  # P4.4 立即告警项（提示词来源故障）
         stable_parts.append(_MINIMAL_SAFETY_FALLBACK)
 
     stable_text = "\n\n".join(stable_parts)

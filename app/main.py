@@ -6,7 +6,9 @@
 - 任何异常都不外泄内部细节与密钥。
 """
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,10 +17,13 @@ from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api import complete, health
+from app.api import metrics as metrics_api
 from app.chains.orchestrator import Orchestrator
+from app.core.alerting import AlertManager
 from app.core.envelope import ErrorCode, fail
 from app.core.errors import AIServiceError
 from app.core.logger import configure_logging, get_logger
+from app.core.metrics import record_ai_error, record_request
 from app.core.settings import get_settings
 from app.store.prompt_store import PromptStoreService, create_backend
 
@@ -39,6 +44,24 @@ async def lifespan(app: FastAPI):
     )
     app.state.orchestrator = Orchestrator(settings, app.state.prompt_store)
 
+    # 告警（P4.4）：进程内评估 + 日志/webhook 双通道投递，规则见 04-部署运维接入说明 §8.3
+    app.state.alerts = AlertManager(settings)
+    alert_task: asyncio.Task[None] | None = None
+    if settings.alert_enabled:
+        alert_task = asyncio.create_task(app.state.alerts.run_forever())
+    _log.info(
+        "alerting.configured",
+        enabled=settings.alert_enabled,
+        webhook=bool(settings.alert_webhook_url),
+        window_seconds=settings.alert_window_seconds,
+        eval_interval_seconds=settings.alert_eval_interval_seconds,
+    )
+    if settings.alert_enabled and not settings.alert_webhook_url:
+        _log.warning(
+            "alerting.log_only",
+            hint="未配置 ALERT_WEBHOOK_URL：告警只写日志（alert.fired / alert.resolved）",
+        )
+
     _log.info(
         "service.started",
         version=__version__,
@@ -51,6 +74,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if alert_task is not None:
+            alert_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await alert_task
         await app.state.prompt_store.aclose()
         _log.info("service.stopped")
 
@@ -71,6 +98,7 @@ app = FastAPI(
 @app.exception_handler(AIServiceError)
 async def _handle_ai_error(_request: Request, exc: AIServiceError) -> JSONResponse:
     _log.warning("request.failed", code=exc.code, message=exc.message)
+    record_ai_error(exc.code)
     return JSONResponse(status_code=exc.code, content=fail(exc.code, exc.message))
 
 
@@ -96,10 +124,27 @@ async def _handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+# ---------------------------------------------------------------- 指标
+
+
+@app.middleware("http")
+async def _record_http_metrics(_request: Request, call_next: Any) -> Any:
+    """每个 HTTP 响应计一次（5xx 按状态码判定，涵盖 /health 非 200）。"""
+    try:
+        response = await call_next(_request)
+    except Exception:
+        # 极端情况：异常没被上面三个处理器兜住 → 仍算一次 5xx，然后照常抛出
+        record_request(500)
+        raise
+    record_request(response.status_code)
+    return response
+
+
 # ---------------------------------------------------------------- 路由
 
 app.include_router(health.router)
 app.include_router(complete.router)
+app.include_router(metrics_api.router)
 
 _settings = get_settings()
 if _settings.cors_origin_list:  # 默认关闭：AI 服务不应被前端直连

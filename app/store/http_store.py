@@ -14,6 +14,7 @@ import httpx
 
 from app.core.errors import UpstreamUnavailableError
 from app.core.logger import get_logger
+from app.core.metrics import record_prompt_store_failure
 from app.store.base import PromptRow
 
 _log = get_logger()
@@ -38,6 +39,7 @@ class HttpPromptStore:
             payload = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             _log.error("prompt_store.http_failed", url=url, error=str(exc))
+            record_prompt_store_failure()  # P4.4 立即告警项（主服务内部接口故障）
             raise UpstreamUnavailableError("获取提示词失败") from exc
 
         if payload.get("code") != 0:

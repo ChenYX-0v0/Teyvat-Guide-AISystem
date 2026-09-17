@@ -18,6 +18,7 @@ from app.core.errors import (
     classify_upstream_error,
 )
 from app.core.logger import get_logger
+from app.core.metrics import record_completion
 from app.core.settings import Settings
 from app.llm.classifier import classify_off_topic, should_classify
 from app.llm.deepseek import build_llm
@@ -268,6 +269,8 @@ class Orchestrator:
             reasoning_chars=len(reasoning_text or ""),
             elapsed_ms=elapsed_ms,
         )
+        # P4.4：观测前缀缓存是否长期未命中（tokens_cached == 0）
+        record_completion(usage.cached)
 
         # 无关问题判定：生成结束之后调用（见 shared-docs/05 §3.2）。
         # 失败返回 None → 字段缺省 = 主服务保持 `off_topic = NULL`（未判定）。
@@ -337,6 +340,7 @@ class Orchestrator:
             tokens_cached=usage.cached,
             elapsed_ms=elapsed_ms,
         )
+        record_completion(usage.cached)
         # 无关问题判定：**done 之前**执行，结果随 done 一起下发（done 因此晚 0.3~1s，
         # 此时全文已发出，用户无感）。判定失败只表现为字段缺省（未判定），不影响回答。
         verdict = await self._judge_off_topic(req)
