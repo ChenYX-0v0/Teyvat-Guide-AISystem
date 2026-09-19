@@ -9,6 +9,9 @@ ARG PIP_INDEX_URL_ARG=https://pypi.tuna.tsinghua.edu.cn/simple
 # ============================================================
 FROM python:${PYTHON_VERSION}-slim AS builder
 
+# ⚠️ ARG 在 FROM 之前声明时，stage 内部看不见，必须在这里再声明一次（同 server/Dockerfile 的坑）
+ARG PIP_INDEX_URL_ARG
+
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_INDEX_URL=${PIP_INDEX_URL_ARG}
