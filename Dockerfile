@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3.14
+# 国内构建用：PyPI 镜像（清华源）。langchain 依赖多，走官方源在 ECS 上会非常慢甚至超时。
+ARG PIP_INDEX_URL_ARG=https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ============================================================
 # builder —— 只负责把依赖装进独立的 venv
@@ -8,7 +10,8 @@ ARG PYTHON_VERSION=3.14
 FROM python:${PYTHON_VERSION}-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=${PIP_INDEX_URL_ARG}
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
