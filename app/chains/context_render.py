@@ -21,6 +21,39 @@ _TALENT_LABELS = {
     "elementalBurst": "爆发",
 }
 
+# 玩家档案的头部字段（其余顶层字段一律渲染进"档案头"下方，见 _fmt_player_extra）
+_PLAYER_HEADER_KEYS = {"uid", "nickname", "level", "characters"}
+
+# 终局玩法的友好标签。⚠️ 这类字段此前被整块丢弃（只渲染 characters），
+# 导致"终局概要已进上下文"实际未生效（2026-09-27 线上实测踩到）。
+_ENDGAME_LABELS = {
+    "abyss": "深渊",
+    "theater": "幻想真境剧诗",
+    "stygian": "幽境危战",
+    "abyssFloor": "深渊",
+}
+
+
+def _fmt_player_extra(key: str, value: Any) -> str:
+    """渲染玩家档案里 characters 之外的字段（终局概要等）。
+
+    - 字符串值：主服务在"没有数据"时会直接给一句人话（如「档案中未提供（玩家可能未公开战绩）」），原样带上；
+    - 已知终局字段：转成人话（深渊 12-3、36 星），比裸 JSON 更好用也更省 token；
+    - 其它未知字段：`key: value` 兜底，保持"主服务加字段不必改 AI 服务"的约定。
+    """
+    label = _ENDGAME_LABELS.get(key, key)
+    if isinstance(value, str):
+        return f"{label}：{value}"
+    if not isinstance(value, dict):
+        return f"{label}：{value}"
+    if key == "abyss" and value.get("floor") is not None:
+        return f"{label}：{value.get('floor')}-{value.get('room', 1)}，{value.get('stars', 0)} 星"
+    if key == "theater" and value.get("act") is not None:
+        return f"{label}：第 {value.get('act')} 幕，{value.get('stars', 0)} 星"
+    if key == "stygian" and value.get("index") is not None:
+        return f"{label}：第 {value.get('index')} 期，用时 {value.get('seconds', 0)} 秒"
+    return f"{label}：" + "，".join(f"{k} {v}" for k, v in value.items())
+
 
 def _fmt_talents(talents: dict[str, Any]) -> str:
     if not talents:
@@ -62,6 +95,26 @@ def _fmt_artifacts(artifacts: Any) -> str:
     return "；".join(chunks)
 
 
+def _fmt_relic_score(score: Any) -> str:
+    """圣遗物评分（主服务 2026-09-27 起随角色下发）：转成人话，省 token 也更好读。"""
+    if not isinstance(score, dict):
+        return ""
+    bits: list[str] = []
+    if score.get("avg") is not None:
+        bits.append(f"平均 {score['avg']} 分")
+    if score.get("class"):
+        bits.append(str(score["class"]))
+    if score.get("total") is not None:
+        bits.append(f"总分 {score['total']}")
+    if score.get("words") is not None:
+        bits.append(f"词条 {score['words']}")
+    if score.get("crit") is not None:
+        bits.append(f"双暴 {score['crit']}")
+    if not bits:
+        return ""
+    return "圣遗物评分：" + "，".join(bits)
+
+
 def _render_character(char: Any) -> str:
     if not isinstance(char, dict):
         return ""
@@ -85,10 +138,13 @@ def _render_character(char: Any) -> str:
     artifacts = _fmt_artifacts(char.get("artifacts"))
     if artifacts:
         extra.append(f"圣遗物：{artifacts}")
+    relic_score = _fmt_relic_score(char.get("relicScore"))
+    if relic_score:
+        extra.append(relic_score)
     if extra:
         line += "\n    · " + "\n    · ".join(extra)
 
-    known = {"name", "level", "constellation", "talents", "weapon", "artifacts"}
+    known = {"name", "level", "constellation", "talents", "weapon", "artifacts", "relicScore"}
     for key, value in char.items():
         if key in known or value in (None, "", [], {}):
             continue
@@ -114,6 +170,7 @@ def render_context(context: RequestContext, budget_tokens: int) -> str:
 
     player = context.player
     header_line = ""
+    extra_lines: list[str] = []
     char_entries: list[str] = []
 
     if player is not None:
@@ -123,6 +180,12 @@ def render_context(context: RequestContext, budget_tokens: int) -> str:
         if player.level is not None:
             header.append(f"冒险等阶：{player.level}")
         header_line = "【玩家档案】" + ("（" + "，".join(header) + "）" if header else "")
+
+        # 终局概要等顶层字段（2026-09-27 修复：此前这些字段被整块忽略，模型看不到）
+        for key, value in player.model_dump(exclude_none=True).items():
+            if key in _PLAYER_HEADER_KEYS or value in (None, "", [], {}):
+                continue
+            extra_lines.append(f"  · {_fmt_player_extra(key, value)}")
 
         for char in player.characters:
             rendered = _render_character(char.model_dump(exclude_none=True))
@@ -136,6 +199,9 @@ def render_context(context: RequestContext, budget_tokens: int) -> str:
         blocks = list(prefix_blocks)
         if header_line:
             lines = [header_line]
+            # 终局概要放在角色明细**之前**：裁剪策略是"整条丢弃末尾角色"，
+            # 放前面才能保证它一定进 prompt（它是几行固定成本，且是数值类问题的依据）
+            lines.extend(extra_lines)
             if char_entries:
                 lines.append("角色：")
                 lines.extend(char_entries[:kept])
