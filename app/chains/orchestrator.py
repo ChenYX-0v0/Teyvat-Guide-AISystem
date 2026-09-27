@@ -21,6 +21,7 @@ from app.core.logger import get_logger
 from app.core.metrics import record_completion
 from app.core.settings import Settings
 from app.llm.classifier import classify_off_topic, should_classify
+from app.llm.guard import GuardHit, screen_request
 from app.llm.deepseek import build_llm
 from app.llm.profiles import Profile
 from app.schemas.chat import ChatMessage, CompleteData, CompleteRequest, TokenUsage
@@ -223,9 +224,34 @@ class Orchestrator:
 
     # ---------------- 非流式 ----------------
 
+    @staticmethod
+    def _guard_data(hit: GuardHit) -> CompleteData:
+        """守卫短路的返回体。
+
+        没调用上游 ⇒ tokens 全 0、model/profile 标 `guard`（便于观测区分真实生成）；
+        `offTopic=True` 是**真话**（确实越界）⇒ 主服务照常写进 `chat_messages.off_topic`，
+        与分类器同一条链路，后台统计无需新增字段（口径见 shared-docs/05 §3.3）。
+        """
+        return CompleteData(
+            reply=hit.reply,
+            model="guard",
+            tokens=TokenUsage(),
+            finishReason="guard",
+            elapsedMs=0,
+            profile="guard",
+            thinking=False,
+            offTopic=True,
+            offTopicReason=hit.reason,
+        )
+
     async def complete(self, req: CompleteRequest) -> CompleteData:
         self._validate(req)
         profile = decide_profile(req, self._settings.llm_default_profile)
+        # L2 事前短路（设计见 ai/09、登记见 ai/07 TODO-12）：
+        # 命中就**不调用大模型** —— 零 token 成本、结果确定；rules 那三句固定话术只是概率约束 ✗
+        guard = screen_request(self._settings, req)
+        if guard is not None:
+            return self._guard_data(guard)
         options = req.options
 
         llm = self._build_llm(profile, options, streaming=False)
@@ -299,6 +325,22 @@ class Orchestrator:
         self._validate(req)
         profile = decide_profile(req, self._settings.llm_default_profile)
         options = req.options
+
+        # 同上：短路也要走完整的 delta + done，前端的渲染逻辑不需要分叉
+        guard = screen_request(self._settings, req)
+        if guard is not None:
+            data = self._guard_data(guard)
+            yield "delta", {"text": data.reply}
+            yield "done", {
+                "tokens": data.tokens.model_dump(),
+                "finishReason": data.finishReason,
+                "model": data.model,
+                "profile": data.profile,
+                "elapsedMs": data.elapsedMs,
+                "offTopic": data.offTopic,
+                "offTopicReason": data.offTopicReason,
+            }
+            return
 
         try:
             llm = self._build_llm(profile, options, streaming=True)

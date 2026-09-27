@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     max_prompt_chars: int = 4000
     max_history_messages: int = 40
 
+    # ---------- 事前短路守卫（L2；设计见 teyvat-docs/ai/09，登记见 ai/07 TODO-12） ----------
+    # 命中特征（越狱套话 / 现实任务 / 情感类 / 严重违规）→ 直接回固定话术、**不调用大模型**：
+    # 零 token 成本、结果确定。rules 那三句话术是概率约束，这里是确定性闸门。
+    # off = 不做；observe = 只记日志（灰度观测误伤率）；block = 拦截（默认）
+    guard_enabled: bool = True
+    guard_mode: str = "block"
+
     # ---------- 无关问题判定（口径见 shared-docs/05 §3） ----------
     # off = 不判定（默认，off_topic 全为 NULL）
     # sample = 会话首问必判 + 其余按比例抽样（成本与覆盖的折中）
