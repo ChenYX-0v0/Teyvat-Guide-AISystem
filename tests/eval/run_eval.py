@@ -47,6 +47,7 @@ def main() -> int:
     ap.add_argument("--tag", default="", help="只跑某个 tag")
     ap.add_argument("--profile", default="", help="覆盖推理档位（默认交给服务端路由）")
     ap.add_argument("--out", default="", help="输出文件名（默认 baseline_<日期>.json）")
+    ap.add_argument("--base", default=BASE_URL, help="AI 服务地址（默认 8090；对比 v11 时可指向隔离实例）")
     args = ap.parse_args()
 
     spec = json.loads(QUESTIONS.read_text(encoding="utf-8"))
@@ -69,7 +70,7 @@ def main() -> int:
             payload["options"] = {"profile": args.profile}
         t0 = time.time()
         try:
-            resp = client.post(f"{BASE_URL}/v1/complete", json=payload)
+            resp = client.post(f"{args.base}/v1/complete", json=payload)
             resp.raise_for_status()
             data = resp.json().get("data", {})
             reply = data.get("reply", "")
