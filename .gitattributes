@@ -1,0 +1,5 @@
+# 提示词与迁移 SQL 必须保持 LF：
+#   它们会被**直接丢给 MySQL 执行**，CRLF 会让每条换行多一个 CR 混进 prompt
+#   （2026-10-12 实踩：base 325 -> 335 字符，见 teyvat-docs/ai/07 TODO-17）。
+db/migrations/*.sql -text
+prompts/*.json text eol=lf
