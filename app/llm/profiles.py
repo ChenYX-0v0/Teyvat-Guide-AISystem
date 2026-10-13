@@ -40,7 +40,7 @@ PROFILES: dict[str, Profile] = {
         thinking=False,
         reasoning_effort="none",
         temperature=0.85,
-        max_tokens=1024,
+        max_tokens=2048,
         note="派蒙日常闲聊/答疑",
     ),
     # 养成分析 / 配队 / 词条收益：需要数值推理

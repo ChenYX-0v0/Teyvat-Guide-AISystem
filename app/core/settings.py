@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     llm_default_profile: str = "chat"
 
     # ---------- 上下文预算 ----------
+    # 2026-10-12 上调（用户反馈"回答普遍偏短 / 展柜 12 位只答出 7 位"）：
+    # 提示词本体（v11）实测 ≈ 1633 token，旧的 system_budget=3000 只留 1367 给动态区 ✗，
+    # 而玩家面板自己要 1500 ⇒ 面板被削、依据变少 ⇒ 回答自然短。
+    # 现在 8000 - 1633 ≈ 6367 给动态区（玩家面板 3000 + 资料 1200 都放得下）。
     history_budget_tokens: int = 6000
-    system_budget_tokens: int = 3000
-    player_context_budget_tokens: int = 1500
+    system_budget_tokens: int = 8000
+    player_context_budget_tokens: int = 3000
 
     # ---------- 入参防护 ----------
     max_prompt_chars: int = 4000
