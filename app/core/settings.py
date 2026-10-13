@@ -41,10 +41,16 @@ class Settings(BaseSettings):
     # 2026-10-12 上调（用户反馈"回答普遍偏短 / 展柜 12 位只答出 7 位"）：
     # 提示词本体（v11）实测 ≈ 1633 token，旧的 system_budget=3000 只留 1367 给动态区 ✗，
     # 而玩家面板自己要 1500 ⇒ 面板被削、依据变少 ⇒ 回答自然短。
-    # 现在 8000 - 1633 ≈ 6367 给动态区（玩家面板 3000 + 资料 1200 都放得下）。
+    # 2026-10-13 二次上调（接入角色机制卡，见 teyvat-docs/ai/07 TODO-20）：
+    # 动态区现在最多有 4 块 —— 玩家面板 3000 + 机制卡 2600（2 张卡 1800 + 规则 800 ✓）
+    # + 攻略卡 2400 + 权威资料 1200 ⇒ 峰值 ≈ 9200 ✗，旧的 8000 - 1633 ≈ 6367 装不下，
+    # 会出现"机制卡/攻略卡进来把面板挤掉"✗。现在 12000 - 1700(v12 提示词本体) ≈ 10300 ✓
+    # ⇒ **任何组合都放得下** ✓（多花的 token 只在这几块真的命中时才发生 ✓，且前缀缓存仍命中 ✓）。
     history_budget_tokens: int = 6000
-    system_budget_tokens: int = 8000
-    player_context_budget_tokens: int = 3000
+    system_budget_tokens: int = 12000
+    # player_context_budget_tokens 是 render_context 的**总**预算（摘要块 + 角色条目共用 ✓）：
+    # 摘要里现在装着机制卡/攻略卡/权威资料 ⇒ 旧值 3000 会让"摘要吃光预算、角色条目被丢"✗。
+    player_context_budget_tokens: int = 9000
 
     # ---------- 入参防护 ----------
     max_prompt_chars: int = 4000
